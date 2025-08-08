@@ -59,6 +59,7 @@
 #include "positioning/test_positioning.h"
 #include "upgrade/test_upgrade.h"
 #include "power_management/test_power_management.h"
+#include "widget_detector/test_widget_detector.h"
 
 /* Private constants ---------------------------------------------------------*/
 #define RUN_INDICATE_TASK_FREQ_1HZ        1
@@ -74,6 +75,9 @@ static bool s_isApplicationStart = false;
 /* Private functions declaration ---------------------------------------------*/
 static T_DjiReturnCode DjiUser_PrintConsole(const uint8_t *data, uint16_t dataLen);
 static T_DjiReturnCode DjiUser_FillInUserInfo(T_DjiUserInfo *userInfo);
+
+static void ExternalCommunication_SendText(const char *text);
+static void ExternalCommunication_SendData(const uint8_t *data, size_t length);
 
 /* Exported functions definition ---------------------------------------------*/
 void DjiUser_StartTask(void const *argument)
@@ -128,6 +132,9 @@ void DjiUser_StartTask(void const *argument)
 
     UART_Init(DJI_CONSOLE_UART_NUM, DJI_CONSOLE_UART_BAUD);
     Led_Init(LED3);
+		
+		UART_Init(EXTERNAL_UART_NUM, EXTERNAL_UART_BAUD);
+		ExternalCommunication_SendText("External communication start\r\n");
 
 //Attention: if you want to run payload sdk on extension port, please define the macro USE_USB_HOST_UART.
 #if USE_USB_HOST_UART
@@ -189,10 +196,15 @@ void DjiUser_StartTask(void const *argument)
         goto out;
     }
 
-    returnCode = DjiCore_SetAlias("PSDK_APPALIAS");
+    returnCode = DjiCore_SetAlias("Avalanche Detector");
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("set alias error");
         goto out;
+    }
+		
+		returnCode = DjiTest_WidgetDetectorStartService();
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("detector widget sample init error");
     }
 
 #ifdef CONFIG_MODULE_SAMPLE_POWER_MANAGEMENT_ON
@@ -356,6 +368,7 @@ void DjiUser_StartTask(void const *argument)
     }
 
     s_isApplicationStart = true;
+		ExternalCommunication_SendText("External communication init complete\r\n");
 
     while (1) {
         Osal_TaskSleepMs(500);
@@ -363,6 +376,7 @@ void DjiUser_StartTask(void const *argument)
     }
 
 out:
+		ExternalCommunication_SendText("External communication init fail\r\n");
     vTaskDelete(xTaskGetCurrentTaskHandle());
 }
 
@@ -507,6 +521,16 @@ static T_DjiReturnCode DjiUser_PrintConsole(const uint8_t *data, uint16_t dataLe
     UART_Write(DJI_CONSOLE_UART_NUM, (uint8_t *) data, dataLen);
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
+}
+
+static void ExternalCommunication_SendText(const char *text)
+{
+    UART_Write(EXTERNAL_UART_NUM, (const uint8_t *) text, strlen(text));
+}
+
+static void ExternalCommunication_SendData(const uint8_t *data, size_t length)
+{
+    UART_Write(EXTERNAL_UART_NUM, data, length);
 }
 
 #ifdef __cplusplus

@@ -1,7 +1,7 @@
 /**
  ********************************************************************
- * @file    dji_sdk_config.h
- * @brief   This is the header file for "dji_config.c", defining the structure and
+ * @file    file_binary_array_list_en.h
+ * @brief   This is the header file for "file_binary_array_list_en.c", defining the structure and
  * (exported) function prototypes.
  *
  * @copyright (c) 2021 DJI. All rights reserved.
@@ -24,57 +24,34 @@
  */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef DJI_SDK_CONFIG_H
-#define DJI_SDK_CONFIG_H
+#ifndef FILE_BINARY_ARRAY_LIST_EN_H
+#define FILE_BINARY_ARRAY_LIST_EN_H
 
-/* Includes ------------------------------------------------------------------*/
+#include <stdint.h>
+#include <dji_widget.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* Includes ------------------------------------------------------------------*/
+
+
 /* Exported constants --------------------------------------------------------*/
-// #define CONFIG_MODULE_SAMPLE_POWER_MANAGEMENT_ON
 
-// #define CONFIG_MODULE_SAMPLE_WIDGET_ON
-
-// #define CONFIG_MODULE_SAMPLE_WIDGET_SPEAKER_ON
-
-// #define CONFIG_MODULE_SAMPLE_DATA_TRANSMISSION_ON
-
-// #define CONFIG_MODULE_SAMPLE_FC_SUBSCRIPTION_ON
-
-// #define CONFIG_MODULE_SAMPLE_GIMBAL_EMU_ON
-
-// #define CONFIG_MODULE_SAMPLE_CAMERA_ON
-
-// #define CONFIG_MODULE_SAMPLE_XPORT_ON
-
-// #define CONFIG_MODULE_SAMPLE_UPGRADE_ON
-
-// #define CONFIG_MODULE_SAMPLE_HMS_CUSTOMIZATION_ON
-
-/*!< Attention: Please uncomment it in gps environment.
-* */
-//#define CONFIG_MODULE_SAMPLE_TIME_SYNC_ON
-
-//#define CONFIG_MODULE_SAMPLE_POSITIONING_ON
-
-//#endif
-
-#define USER_FIRMWARE_MAJOR_VERSION         (1)
-#define USER_FIRMWARE_MINOR_VERSION         (33)
-#define USER_FIRMWARE_MODIFY_VERSION        (88)
-#define USER_FIRMWARE_DEBUG_VERSION         (99)
 
 /* Exported types ------------------------------------------------------------*/
 
+
 /* Exported functions --------------------------------------------------------*/
 
+extern uint32_t g_EnBinaryArrayCount;
+extern T_DjiWidgetFileBinaryArray * g_EnFileBinaryArrayList;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // DJI_SDK_CONFIG_H
+#endif // FILE_BINARY_ARRAY_LIST_EN_H
+
 /************************ (C) COPYRIGHT DJI Innovations *******END OF FILE******/

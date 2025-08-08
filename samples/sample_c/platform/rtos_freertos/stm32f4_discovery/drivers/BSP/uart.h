@@ -42,6 +42,10 @@
 #define DJI_CONSOLE_UART_NUM             UART_NUM_2
 #define DJI_CONSOLE_UART_BAUD            921600
 
+#define EXTERNAL_UART_NUM  							 UART_NUM_1
+#define EXTERNAL_UART_BAUD               921600
+#define EXTERNAL_UART_MAX_LENGTH 		     64
+
 /* Exported types ------------------------------------------------------------*/
 typedef enum {
     UART_NUM_1 = 1,
