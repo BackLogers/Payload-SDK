@@ -185,22 +185,25 @@ static void *DjiTest_WidgetTask(void *arg)
 //        djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
 //        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
 //            USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
-//        }
-				
-				//TUTAJ CHCE ZMIENIC WARTOSC NP. DJI_WIDGET_TYPE_SCALE 
-				//UART_Write(EXTERNAL_COMMUNICATION_UART_NUM, data, length);
+//        }--	
+
 				int uartReadLength = UART_Read(EXTERNAL_UART_NUM, uartDataBuffer, EXTERNAL_UART_MAX_LENGTH);
 				if(uartReadLength > 0){
-					UART_Write(EXTERNAL_UART_NUM, uartDataBuffer, uartReadLength);
-					snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN, "%s", uartDataBuffer);
+					UART_Write(EXTERNAL_UART_NUM, uartDataBuffer, uartReadLength); //ping pong
+					
+					int value = atoi((char *)uartDataBuffer);
+					snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN, "%d", value);
 
 					djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
 					if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
 							USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
 					}
+					
+					DjiTestWidget_SetWidgetValue(DJI_WIDGET_TYPE_SCALE, 3, value, NULL);
+					
 				}
 				
-        osalHandler->TaskSleepMs(1000);
+        osalHandler->TaskSleepMs(200);
     }
 }
 
