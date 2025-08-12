@@ -45,8 +45,8 @@ extern "C" {
 
 /* Exported functions --------------------------------------------------------*/
 
-extern uint32_t g_EnBinaryArrayCount;
-extern T_DjiWidgetFileBinaryArray * g_EnFileBinaryArrayList;
+extern uint32_t g_DetectorBinaryArrayCount;
+extern T_DjiWidgetFileBinaryArray * g_DetectorFileBinaryArrayList;
 
 #ifdef __cplusplus
 }

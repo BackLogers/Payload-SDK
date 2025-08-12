@@ -29,15 +29,9 @@ static char s_widgetFileDirPath[DJI_FILE_PATH_SIZE_MAX] = {0};
 uint8_t uartDataBuffer[EXTERNAL_UART_MAX_LENGTH];
 
 static const T_DjiWidgetHandlerListItem s_widgetHandlerList[] = {
-    {0, DJI_WIDGET_TYPE_BUTTON,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {1, DJI_WIDGET_TYPE_LIST,          DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {2, DJI_WIDGET_TYPE_SWITCH,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {3, DJI_WIDGET_TYPE_SCALE,         DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {4, DJI_WIDGET_TYPE_BUTTON,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {5, DJI_WIDGET_TYPE_SCALE,         DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {6, DJI_WIDGET_TYPE_INT_INPUT_BOX, DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {7, DJI_WIDGET_TYPE_SWITCH,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
-    {8, DJI_WIDGET_TYPE_LIST,          DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {0, DJI_WIDGET_TYPE_LIST,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {1, DJI_WIDGET_TYPE_SWITCH,          DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
+    {2, DJI_WIDGET_TYPE_SCALE,        DjiTestWidget_SetWidgetValue, DjiTestWidget_GetWidgetValue, NULL},
 };
 
 static const char *s_widgetTypeNameArray[] = {
@@ -115,8 +109,8 @@ T_DjiReturnCode DjiTest_WidgetDetectorStartService(void)
 #else
     //Step 2 : Set UI Config (RTOS environment)
     T_DjiWidgetBinaryArrayConfig enWidgetBinaryArrayConfig = {
-        .binaryArrayCount = g_EnBinaryArrayCount,
-        .fileBinaryArrayList = g_EnFileBinaryArrayList
+        .binaryArrayCount = g_DetectorBinaryArrayCount,
+        .fileBinaryArrayList = g_DetectorFileBinaryArrayList
     };
 
     //set default ui config
@@ -172,6 +166,12 @@ static void *DjiTest_WidgetTask(void *arg)
     T_DjiReturnCode djiStat;
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
+    snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN, "%s", " ");
+    djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
+	if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+	    USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
+	}
+
     USER_UTIL_UNUSED(arg);
 
     while (1) {
@@ -199,7 +199,7 @@ static void *DjiTest_WidgetTask(void *arg)
 							USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
 					}
 					
-					DjiTestWidget_SetWidgetValue(DJI_WIDGET_TYPE_SCALE, 3, value, NULL);
+					DjiTestWidget_SetWidgetValue(DJI_WIDGET_TYPE_SCALE, 2, value, NULL);
 					
 				}
 				
