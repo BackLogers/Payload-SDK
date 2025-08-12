@@ -59,7 +59,8 @@
 #include "positioning/test_positioning.h"
 #include "upgrade/test_upgrade.h"
 #include "power_management/test_power_management.h"
-#include "widget_detector/test_widget_detector.h"
+
+#include "widget_detector/widget_detector.h"
 
 /* Private constants ---------------------------------------------------------*/
 #define RUN_INDICATE_TASK_FREQ_1HZ        1

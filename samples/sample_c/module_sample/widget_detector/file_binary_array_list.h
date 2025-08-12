@@ -1,25 +1,30 @@
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef TEST_WIDGET_DETECTOR_H
-#define TEST_WIDGET_DETECTOR_H
+#ifndef FILE_BINARY_ARRAY_LIST_H
+#define FILE_BINARY_ARRAY_LIST_H
 
-/* Includes ------------------------------------------------------------------*/
-#include <dji_typedef.h>
+#include <stdint.h>
+#include <dji_widget.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* Includes ------------------------------------------------------------------*/
+
+
 /* Exported constants --------------------------------------------------------*/
+
 
 /* Exported types ------------------------------------------------------------*/
 
+
 /* Exported functions --------------------------------------------------------*/
-T_DjiReturnCode DjiTest_WidgetDetectorStartService(void);
-T_DjiReturnCode DjiTest_WidgetDetectorSetConfigFilePath(const char *path);
-__attribute__((weak)) void DjiTest_WidgetLogAppend(const char *fmt, ...);
+
+extern uint32_t g_DetectorBinaryArrayCount;
+extern T_DjiWidgetFileBinaryArray * g_DetectorFileBinaryArrayList;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif 
+#endif // FILE_BINARY_ARRAY_LIST_H

@@ -1,12 +1,12 @@
 /* Includes ------------------------------------------------------------------*/
-#include "test_widget_detector.h"
+#include "widget_detector.h"
 #include <dji_widget.h>
 #include <dji_logger.h>
 #include "../utils/util_misc.h"
 #include <dji_platform.h>
 #include <stdio.h>
 #include "dji_sdk_config.h"
-#include "file_binary_array_list_en.h"
+#include "file_binary_array_list.h"
 #include "uart.h"
 
 /* Private constants ---------------------------------------------------------*/
