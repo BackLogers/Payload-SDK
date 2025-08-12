@@ -14,6 +14,36 @@
 #define WIDGET_TASK_STACK_SIZE          (2048)
 
 /* Private types -------------------------------------------------------------*/
+typedef enum int8_t{
+    DIR_UNDEFINED   = -1,
+    DIR_NONE        = 0, 
+    DIR_FORWARD     = 1,
+    DIR_FORWARD_RIGHT = 2,
+    DIR_RIGHT       = 3,
+    DIR_BACKWARD_RIGHT = 4,
+    DIR_BACKWARD    = 5,
+    DIR_BACKWARD_LEFT = 6,
+    DIR_LEFT        = 7,
+    DIR_FORWARD_LEFT = 8
+} Direction_t;
+
+typedef struct {
+		bool detected;
+    Direction_t direction;
+    int16_t distance;   
+} DetectionData_t;
+
+static const char* directionArrows[] = {
+    "\xE2\x97\x89",   // DIR_NONE (0)
+    "\xE2\x86\x91",   // DIR_FORWARD
+    "\xE2\x86\x97",   // DIR_FORWARD_RIGHT
+    "\xE2\x86\x92",   // DIR_RIGHT
+    "\xE2\x86\x98",   // DIR_BACKWARD_RIGHT
+    "\xE2\x86\x93",   // DIR_BACKWARD
+    "\xE2\x86\x99",   // DIR_BACKWARD_LEFT
+    "\xE2\x86\x90",   // DIR_LEFT
+    "\xE2\x86\x96"    // DIR_FORWARD_LEFT
+};
 
 /* Private functions declaration ---------------------------------------------*/
 static void *DjiTest_WidgetTask(void *arg);
@@ -162,47 +192,54 @@ __attribute__((weak)) void DjiTest_WidgetLogAppend(const char *fmt, ...)
 static void *DjiTest_WidgetTask(void *arg)
 {
     char message[DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN];
-    uint32_t sysTimeMs = 0;
     T_DjiReturnCode djiStat;
     T_DjiOsalHandler *osalHandler = DjiPlatform_GetOsalHandler();
 
+    osalHandler->TaskSleepMs(500);
+
     snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN, "%s", " ");
     djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
-	if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-	    USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
-	}
+    if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
+    }
 
     USER_UTIL_UNUSED(arg);
 
     while (1) {
-//        djiStat = osalHandler->GetTimeMs(&sysTimeMs);
-//        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-//            USER_LOG_ERROR("Get system time ms error, stat = 0x%08llX", djiStat);
-//        }
+        int uartReadLength = UART_Read(EXTERNAL_UART_NUM, uartDataBuffer, EXTERNAL_UART_MAX_LENGTH);
 
-//        snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN, "System time : %u ms", sysTimeMs);
+        if (uartReadLength == sizeof(DetectionData_t)) {
+            DetectionData_t data;
+            memcpy(&data, uartDataBuffer, sizeof(DetectionData_t));
 
-//        djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
-//        if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-//            USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
-//        }--	
+            const char* arrow;
+            if (data.direction < 0 || data.direction > 8) {
+                arrow = "?";
+            } else {
+                arrow = directionArrows[data.direction];
+            }
 
-				int uartReadLength = UART_Read(EXTERNAL_UART_NUM, uartDataBuffer, EXTERNAL_UART_MAX_LENGTH);
-				if(uartReadLength > 0){
-					UART_Write(EXTERNAL_UART_NUM, uartDataBuffer, uartReadLength); //ping pong
-					
-					int value = atoi((char *)uartDataBuffer);
-					snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN, "%d", value);
+            snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN,
+                     "Detected: %s\nDirection: %s\nDistance: %d m",
+                     data.detected ? "True" : "False",
+                     arrow,
+                     data.distance);
 
-					djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
-					if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-							USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
-					}
-					
-					DjiTestWidget_SetWidgetValue(DJI_WIDGET_TYPE_SCALE, 2, value, NULL);
-					
-				}
-				
+            djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
+            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+                USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
+            }
+
+            DjiTestWidget_SetWidgetValue(DJI_WIDGET_TYPE_SCALE, 2, data.distance, NULL);
+
+            UART_Write(EXTERNAL_UART_NUM, uartDataBuffer, sizeof(DetectionData_t)); // echo
+
+        } else if (uartReadLength > 0) {
+            snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN,
+                     "Invalid data len: %d (expect %d)", uartReadLength, (int)sizeof(DetectionData_t));
+            djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
+        }
+
         osalHandler->TaskSleepMs(200);
     }
 }
