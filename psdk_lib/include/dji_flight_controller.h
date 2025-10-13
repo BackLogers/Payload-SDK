@@ -292,12 +292,15 @@ typedef struct {
 } T_DjiFtsPwmTriggerStatus;
 
 typedef struct {
-    T_DjiFtsPwmTriggerStatus ESC[2]; /* trigger status of the two ESCs */
+    T_DjiFtsPwmTriggerStatus ESC[4]; /* trigger status of the two ESCs */
 } T_DjiFtsPwmEscTriggerStatus;
 
 /* Exported functions --------------------------------------------------------*/
 /**
  * @brief Initialise flight controller module
+ * @note  If flight without RC is required, call DjiFlightController_SetRCLostActionEnableStatus(DJI_FLIGHT_CONTROLLER_DISABLE_RC_LOST_ACTION) after initialization.
+ *        Otherwise, when the remote controller goes offline, the configured RC-lost action
+ *        (e.g., return-to-home, auto-landing, hover, etc.) will be executed.
  * @param ridInfo: Must report the correct RID information before using PSDK to control the aircraft.
  * @return Execution result.
  */
@@ -647,6 +650,10 @@ T_DjiReturnCode DjiFlightController_GetGeneralInfo(T_DjiFlightControllerGeneralI
   *         if the command is disable, the aircraft will execute RC lost action when RC is lost but PSDK is running
   *         the aircraft will execute RC lost action when RC is lost and PSDK is lost whatever the command is.
   *         default command is disable.
+  *          If flight without RC is required, set DJI_FLIGHT_CONTROLLER_DISABLE_RC_LOST_ACTION.
+  *          Otherwise, when the remote controller goes offline, the configured RC-lost action
+  *          (e.g., return-to-home, auto-landing, hover, etc.) will be executed.
+  *
   * @param executeRCLostActionOrNotWhenOnboardOn  enable:1;disable:0
   * @return T_DjiReturnCode error code
    */
@@ -691,13 +698,24 @@ T_DjiReturnCode DjiFlightController_GetElectronicSpeedControllerStatus(E_DjiFlig
 
 /**
  * @brief Select Fts pwm trigger.
- * @param position: Pwm trigger source position.
- * @return Execution result.
+ * - Notes:Timing requirement: This API must be called while the aircraft is on the ground (not airborne). Calls made during flight will fail or be rejected.
+ * - Function: This call only selects/enables the PWM trigger port on the flight controller side.
+ *   It does NOT emit PWM signals nor perform the motor-stop action itself. The actual motor-stop must be triggered by sending PWM signals via external PWM hardware pins.
+ * - Recommended flow:
+ *   1) Call DjiFlightController_SelectFtsPwmTrigger(position) on ground to enable the port;
+ *   2) Send the motor-stop PWM from an external PWM controller to that port;
+ * @param position
+ * - Supported models/ports:
+ *   - M400: only support DJI_MOUNT_POSITION_EXTENSION_PORT_V2_NO4.
+ * @return Possible failure reasons include invalid param, aircraft not on ground, hardware unsupported, or module not initialized.
  */
 T_DjiReturnCode DjiFlightController_SelectFtsPwmTrigger(E_DjiMountPosition position);
 
 /**
  * @brief Get Fts pwm trigger status.
+ * Notes:This API is deprecated and will be removed in a future release. It is NOT recommended for use. Supported models only: M4 serials.
+ * Recommended alternative: To confirm motor-stop (FTS) effects, use DJI_FC_SUBSCRIPTION_TOPIC_ESC_DATA fc subscription
+ * @param trigger_status
  * @return Execution result.
  */
 T_DjiReturnCode DjiFlightController_GetFtsPwmTriggerStatus(T_DjiFtsPwmEscTriggerStatus* trigger_status);
