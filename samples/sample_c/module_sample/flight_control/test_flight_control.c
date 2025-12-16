@@ -31,6 +31,7 @@
 #include <math.h>
 #include <widget_interaction_test/test_widget_interaction.h>
 #include <dji_aircraft_info.h>
+#include "dji_fts.h"
 /* Private constants ---------------------------------------------------------*/
 
 /* Private types -------------------------------------------------------------*/
@@ -45,6 +46,7 @@ static const double s_earthCenter = 6378137.0;
 static const double s_degToRad = 0.01745329252;
 static bool s_isFtsCallbackRegistered = false;
 static int32_t s_ftsTriggerCount = 0;
+static uint8_t s_mission_state_machine = 0;
 
 static const T_DjiTestFlightControlDisplayModeStr s_flightControlDisplayModeStr[] = {
     {.displayMode = DJI_FC_SUBSCRIPTION_DISPLAY_MODE_ATTITUDE, .displayModeStr = "attitude mode"},
@@ -98,11 +100,12 @@ static void DjiTest_FlightControlGoHomeForceLandingSample(void);
 static void DjiTest_FlightControlVelocityControlSample(void);
 static void DjiTest_FlightControlArrestFlyingSample(void);
 static void DjiTest_FlightControlSetGetParamSample(void);
+static void DjiTest_FlightControlSetGetPerceptionParamSample(void);
 static void DjiTest_FlightControlPassiveTriggerFtsSample(void);
 static void DjiTest_FlightControlSlowRotateMotorSample(void);
-static void DjiTest_FlightControlRCLostActionEnableSample(void);
 static T_DjiReturnCode DjiTest_TriggerFtsEventCallback(void);
 static void DjiTest_FlightControlSample(E_DjiTestFlightCtrlSampleSelect flightCtrlSampleSelect);
+static void DjiTest_FlightControlSetModeStartMission(void);
 
 /* Exported functions definition ---------------------------------------------*/
 T_DjiReturnCode DjiTest_FlightControlRunSample(E_DjiTestFlightCtrlSampleSelect flightCtrlSampleSelect)
@@ -116,11 +119,6 @@ T_DjiReturnCode DjiTest_FlightControlRunSample(E_DjiTestFlightCtrlSampleSelect f
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("Init flight Control sample failed,error code:0x%08llX", returnCode);
         return returnCode;
-    }
-    returnCode = DjiFlightController_SetRCLostActionEnableStatus(DJI_FLIGHT_CONTROLLER_DISABLE_RC_LOST_ACTION);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_WARN("Set RC lost action status disable failed,error code:0x%08llX, That means the aircraft will execute the RC lost Action when RC is lost — RC-less flight not supported.", returnCode);
-        // go through
     }
 
     DjiTest_FlightControlSample(flightCtrlSampleSelect);
@@ -895,6 +893,163 @@ out:
     DjiTest_WidgetLogAppend("Flight control set-get-param sample end");
 }
 
+void DjiTest_FlightControlSetGetPerceptionParamSample()
+{
+    T_DjiReturnCode returnCode;
+    uint16_t exit_reason;
+    T_DjiAircraftInfoBaseInfo aircraftInfoBaseInfo;
+
+    returnCode = DjiAircraftInfo_GetBaseInfo(&aircraftInfoBaseInfo);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("get aircraft base info error");
+        return;
+    }
+
+    switch (aircraftInfoBaseInfo.aircraftType)
+    {
+        case DJI_AIRCRAFT_TYPE_M4T:
+        case DJI_AIRCRAFT_TYPE_M4E:
+        case DJI_AIRCRAFT_TYPE_M4D:
+        case DJI_AIRCRAFT_TYPE_M4TD:
+        case DJI_AIRCRAFT_TYPE_M400:
+            break;
+
+        default:
+            USER_LOG_WARN("aircraft type %d not support", aircraftInfoBaseInfo.aircraftType);
+            return;
+    }
+    USER_LOG_INFO("Flight control set-get-perception-param sample start");
+    DjiTest_WidgetLogAppend("Flight control set-get-perception-param sample start");
+
+    /* perception parameter test*/
+    USER_LOG_INFO("--> Step 1: DjiFlightController_SetPlanningAlgo");
+    DjiTest_WidgetLogAppend("--> Step 1: DjiFlightController_SetPlanningAlgo");
+    returnCode = DjiFlightController_SetPlanningAlgo(1);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("DjiFlightController_SetPlanningAlgo failed, error code: 0x%08X", returnCode);
+    };
+    s_osalHandler->TaskSleepMs(1000);
+
+    USER_LOG_INFO("--> Step 2: DjiFlightController_SetMaxVelocity");
+    DjiTest_WidgetLogAppend("--> Step 2: DjiFlightController_SetMaxVelocity");
+    returnCode = DjiFlightController_SetMaxVelocity(10);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("DjiFlightController_SetMaxVelocity failed, error code: 0x%08X", returnCode);
+    };
+    s_osalHandler->TaskSleepMs(1000);
+
+    USER_LOG_INFO("--> Step 3: DjiFlightController_SetMinFlightHeight");
+    DjiTest_WidgetLogAppend("--> Step 3: DjiFlightController_SetMinFlightHeight");
+    returnCode = DjiFlightController_SetMinFlightHeight(50.0f);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("DjiFlightController_SetMinFlightHeight failed, error code: 0x%08X", returnCode);
+    };
+    s_osalHandler->TaskSleepMs(1000);
+
+    USER_LOG_INFO("--> Step 4: DjiFlightController_GetExitReason");
+    DjiTest_WidgetLogAppend("--> Step 4: DjiFlightController_GetExitReason");
+    returnCode = DjiFlightController_GetExitReason(&exit_reason);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("DjiFlightController_GetExitReason failed, error code: 0x%08X", returnCode);
+    };
+    USER_LOG_INFO("DjiFlightController_GetExitReason is %d\r\n", exit_reason);
+    s_osalHandler->TaskSleepMs(1000);
+
+out:
+    USER_LOG_INFO("Flight control set-get-perception-param sample end");
+    DjiTest_WidgetLogAppend("Flight control set-get-perception-param perceptionsample end");
+
+}
+
+T_DjiReturnCode DjiTest_FlightControlOpenMisInfoCallback(T_DjiFlightControllerOpenMis eventData)
+{
+    s_mission_state_machine = eventData.mission_state_machine;
+    USER_LOG_INFO("OpenMisInfoCallback state_machine = %d, planning_algo = %d, goal_index = %d, distance_remaining = %f, time_remaining = %f, soe_remaining = %d",
+                  eventData.mission_state_machine, eventData.mission_planning_algo, eventData.goal_index,
+                  eventData.distance_remaining, eventData.time_remaining, eventData.soe_remaining);
+}
+
+T_DjiReturnCode DjiTest_FlightControlCoreTrajCallback(T_DjiFlightControllerCoreTraj eventData)
+{
+    USER_LOG_INFO("DjiTest_FlightControlCoreTrajCallback code_name = %d, point_num = %d, byte_per_point = %d",
+                  eventData.code_name, eventData.point_num, eventData.byte_per_point);
+}
+void DjiTest_FlightControlSetModeStartMission()
+{
+    T_DjiReturnCode returnCode;
+    T_DjiFlightControllerStartMissionReq req = {0};
+    T_DjiFlightControllerStartMissionRsp rsp = {0};
+    T_DjiAircraftInfoBaseInfo aircraftInfoBaseInfo;
+
+    returnCode = DjiAircraftInfo_GetBaseInfo(&aircraftInfoBaseInfo);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("get aircraft base info error");
+        return;
+    }
+
+    switch (aircraftInfoBaseInfo.aircraftType)
+    {
+        case DJI_AIRCRAFT_TYPE_M4T:
+        case DJI_AIRCRAFT_TYPE_M4E:
+        case DJI_AIRCRAFT_TYPE_M4D:
+        case DJI_AIRCRAFT_TYPE_M4TD:
+        case DJI_AIRCRAFT_TYPE_M400:
+            break;
+
+        default:
+            USER_LOG_WARN("aircraft type %d not support", aircraftInfoBaseInfo.aircraftType);
+            return;
+    }
+
+    req.version = 1;
+    req.operation = 0;
+    req.mea = 10.0f;
+    req.fly_vel = 10;
+    req.goal_num = 1;
+    req.cmd_mode_point_info->lat = 22.578111231;
+    req.cmd_mode_point_info->lon = 113.93696;
+    req.cmd_mode_point_info->alt = 50.0;
+
+    USER_LOG_INFO("Flight control SetModeStartMission sample start");
+    DjiTest_WidgetLogAppend("Flight control SetModeStartMission sample start");
+
+    returnCode = DjiFlightController_SetModeStartMission(req, &rsp);
+    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        USER_LOG_ERROR("DjiTest_FlightControlSetModeStartMission failed, error code: 0x%08X", returnCode);
+    } else {
+        USER_LOG_INFO("DjiTest_FlightControlSetModeStartMission success ret = %d", returnCode);
+    }
+
+    USER_LOG_INFO("Flight control SetModeStartMission sample end");
+    DjiTest_WidgetLogAppend("Flight control SetModeStartMission sample end");
+
+
+    USER_LOG_INFO("Flight control register callback sample start");
+    DjiTest_WidgetLogAppend("Flight control register callback sample start");
+
+    returnCode = DjiFlightController_RegisterOpenMisInfoCallBack(DjiTest_FlightControlOpenMisInfoCallback);
+    USER_LOG_INFO("RegisterOpenMisInfoCallBack ret = %d", returnCode);
+    returnCode = DjiFlightController_RegisterCoreTrajCallBack(DjiTest_FlightControlCoreTrajCallback);
+    USER_LOG_INFO("RegisterCoreTrajCallBack ret = %d", returnCode);
+
+    s_osalHandler->TaskSleepMs(10000);
+
+    while (true) {
+        if (s_mission_state_machine == 0) {
+            USER_LOG_INFO("Mission is finished.");
+            break;
+        }
+        s_osalHandler->TaskSleepMs(1000);
+    }
+
+    DjiFlightController_AntiRegisterCoreTrajCallBack();
+    DjiFlightController_AntiRegisterOpenMisInfoCallBack();
+    USER_LOG_INFO("Flight control register callback sample end");
+    DjiTest_WidgetLogAppend("Flight control register callback sample end");
+
+    return;
+}
+
 T_DjiReturnCode DjiTest_TriggerFtsEventCallback(void)
 {
     USER_LOG_INFO("Received FTS Trigger event, count = %d.", s_ftsTriggerCount);
@@ -935,6 +1090,7 @@ static void DjiTest_FlightControlSlowRotateMotorSample(void)
 
     T_DjiReturnCode returnCode = 0;
 
+    DjiTest_WidgetLogAppend("Start rotating.");
     USER_LOG_INFO("Start rotating.");
     returnCode = DjiFlightController_StartSlowRotateMotor();
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
@@ -947,7 +1103,11 @@ static void DjiTest_FlightControlSlowRotateMotorSample(void)
         USER_LOG_ERROR("Fail to get ESC status, error code is 0x%08X", returnCode);
     }
 
-    USER_LOG_INFO("The ESC status is: %s motor(s) in rotate mode",
+    DjiTest_WidgetLogAppend("ESC status: %s motor(s) rotate mode",
+        escStatus == DJI_FLIGHT_CONTROLLER_NO_MOTOR_IN_SLOW_ROTATE_MODE ? "no" :
+        escStatus == DJI_FLIGHT_CONTROLLER_SOME_MOTOR_IN_SLOW_ROTATE_MODE ? "some" :
+        escStatus == DJI_FLIGHT_CONTROLLER_ALL_MOTOR_IN_SLOW_ROTATE_MODE ? "all" : "(error)");
+        USER_LOG_INFO("ESC status: %s motor(s) rotate mode",
         escStatus == DJI_FLIGHT_CONTROLLER_NO_MOTOR_IN_SLOW_ROTATE_MODE ? "no" :
         escStatus == DJI_FLIGHT_CONTROLLER_SOME_MOTOR_IN_SLOW_ROTATE_MODE ? "some" :
         escStatus == DJI_FLIGHT_CONTROLLER_ALL_MOTOR_IN_SLOW_ROTATE_MODE ? "all" : "(error)");
@@ -960,12 +1120,17 @@ static void DjiTest_FlightControlSlowRotateMotorSample(void)
             USER_LOG_ERROR("Fail to get ESC status, error code is 0x%08X", returnCode);
         }
 
-        USER_LOG_INFO("The ESC status is: %s motor(s) in rotate mode",
+        DjiTest_WidgetLogAppend("ESC status: %s motor(s) rotate mode",
+            escStatus == DJI_FLIGHT_CONTROLLER_NO_MOTOR_IN_SLOW_ROTATE_MODE ? "no" :
+            escStatus == DJI_FLIGHT_CONTROLLER_SOME_MOTOR_IN_SLOW_ROTATE_MODE ? "some" :
+            escStatus == DJI_FLIGHT_CONTROLLER_ALL_MOTOR_IN_SLOW_ROTATE_MODE ? "all" : "(error)");
+            USER_LOG_INFO("ESC status: %s motor(s) rotate mode",
             escStatus == DJI_FLIGHT_CONTROLLER_NO_MOTOR_IN_SLOW_ROTATE_MODE ? "no" :
             escStatus == DJI_FLIGHT_CONTROLLER_SOME_MOTOR_IN_SLOW_ROTATE_MODE ? "some" :
             escStatus == DJI_FLIGHT_CONTROLLER_ALL_MOTOR_IN_SLOW_ROTATE_MODE ? "all" : "(error)");
     }
 
+    DjiTest_WidgetLogAppend("Stop rotating.");
     USER_LOG_INFO("Stop rotating.");
     returnCode = DjiFlightController_StopSlowRotateMotor();
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
@@ -980,75 +1145,14 @@ static void DjiTest_FlightControlSlowRotateMotorSample(void)
         USER_LOG_ERROR("Fail to get ESC status, error code is 0x%08X", returnCode);
     }
 
-    USER_LOG_INFO("The ESC status is: %s motor(s) in rotate mode",
+    DjiTest_WidgetLogAppend("ESC status: %s motor(s) rotate mode",
         escStatus == DJI_FLIGHT_CONTROLLER_NO_MOTOR_IN_SLOW_ROTATE_MODE ? "no" :
         escStatus == DJI_FLIGHT_CONTROLLER_SOME_MOTOR_IN_SLOW_ROTATE_MODE ? "some" :
         escStatus == DJI_FLIGHT_CONTROLLER_ALL_MOTOR_IN_SLOW_ROTATE_MODE ? "all" : "(error)");
-}
-
-void DjiTest_FlightControlRCLostActionEnableSample()
-{
-    T_DjiReturnCode returnCode;
-
-    USER_LOG_INFO("Flight control RC-lost-action-enable sample start");
-    DjiTest_WidgetLogAppend("Flight control RC-lost-action-enable sample start");
-
-    USER_LOG_INFO("--> Prepare: Set RC Lost action enable, set RC lost action landing");
-    returnCode = DjiFlightController_SetRCLostAction(DJI_FLIGHT_CONTROLLER_RC_LOST_ACTION_LANDING);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Set RC Lost action failed, error code: 0x%08X", returnCode);
-        goto out;
-    }
-
-    returnCode = DjiFlightController_SetRCLostActionEnableStatus(DJI_FLIGHT_CONTROLLER_ENABLE_RC_LOST_ACTION);
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Set RC Lost action status enable failed, error code: 0x%08X", returnCode);
-        goto out;
-    }
-
-    USER_LOG_INFO("--> Step 1: Obtain joystick control authority");
-    DjiTest_WidgetLogAppend("--> Step 1: Obtain joystick control authority");
-    returnCode = DjiFlightController_ObtainJoystickCtrlAuthority();
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Obtain joystick authority failed, error code: 0x%08X", returnCode);
-        goto out;
-    }
-    s_osalHandler->TaskSleepMs(1000);
-
-    USER_LOG_INFO("--> Step 2: Take off\r\n");
-    DjiTest_WidgetLogAppend("--> Step 2: Take off\r\n");
-    if (!DjiTest_FlightControlMonitoredTakeoff()) {
-        USER_LOG_ERROR("Take off failed");
-        goto out;
-    }
-    USER_LOG_INFO("Successful take off\r\n");
-    DjiTest_WidgetLogAppend("Successful take off\r\n");
-
-    USER_LOG_INFO("--> Step 3: Move to north:0(m), east:0(m), up:30(m) , yaw:0(degree) from current point");
-    DjiTest_WidgetLogAppend("--> Step 3: Move to north:0(m), east:0(m), up:30(m) , yaw:0(degree) from current point");
-    if (!DjiTest_FlightControlMoveByPositionOffset((T_DjiTestFlightControlVector3f) {0, 0, 30}, 0, 0.8, 1)) {
-        USER_LOG_ERROR("Move to north:0(m), east:0(m), up:30(m) , yaw:0(degree) from current point failed");
-        goto out;
-    }
-
-    USER_LOG_INFO("--> Step 4: Turn off the RC and check if it RTHs and lands...");
-    s_osalHandler->TaskSleepMs(1000);
-    USER_LOG_INFO("--> Please Turn off the RC and check if it RTHs and lands...");
-    s_osalHandler->TaskSleepMs(1000);
-    USER_LOG_INFO("--> Please Turn off the RC and check if it RTHs and lands...");
-    s_osalHandler->TaskSleepMs(1000);
-
-    USER_LOG_INFO("-> Step 5: Release joystick authority");
-    DjiTest_WidgetLogAppend("-> Step 5: Release joystick authority");
-    returnCode = DjiFlightController_ReleaseJoystickCtrlAuthority();
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Release joystick authority failed, error code: 0x%08X", returnCode);
-        goto out;
-    }
-
-out:
-    USER_LOG_INFO("Flight control RC-lost-action-enable sample end");
-    DjiTest_WidgetLogAppend("Flight control RC-lost-action-enable sample end");
+        USER_LOG_INFO("ESC status: %s motor(s) rotate mode",
+        escStatus == DJI_FLIGHT_CONTROLLER_NO_MOTOR_IN_SLOW_ROTATE_MODE ? "no" :
+        escStatus == DJI_FLIGHT_CONTROLLER_SOME_MOTOR_IN_SLOW_ROTATE_MODE ? "some" :
+        escStatus == DJI_FLIGHT_CONTROLLER_ALL_MOTOR_IN_SLOW_ROTATE_MODE ? "all" : "(error)");
 }
 
 void DjiTest_FlightControlSample(E_DjiTestFlightCtrlSampleSelect flightCtrlSampleSelect)
@@ -1086,8 +1190,12 @@ void DjiTest_FlightControlSample(E_DjiTestFlightCtrlSampleSelect flightCtrlSampl
             DjiTest_FlightControlSlowRotateMotorSample();
             break;
         }
-        case E_DJI_TEST_FLIGHT_CTRL_SAMPLE_SELECT_RC_LOST_ACTION_STATUS_ENBALE: {
-            DjiTest_FlightControlRCLostActionEnableSample();
+        case E_DJI_TEST_FLIGHT_CTRL_SAMPLE_SELECT_SET_GET_PERCEPTION_PARAM: {
+            DjiTest_FlightControlSetGetPerceptionParamSample();
+            break;
+        }
+        case E_DJI_TEST_FLIGHT_CTRL_SAMPLE_SELECT_SET_CMD_START_MISSION: {
+            DjiTest_FlightControlSetModeStartMission();
             break;
         }
         default:
@@ -1692,74 +1800,94 @@ DjiTest_FlightControlJoystickCtrlAuthSwitchEventCallback(T_DjiFlightControllerJo
     switch (eventData.joystickCtrlAuthoritySwitchEvent) {
         case DJI_FLIGHT_CONTROLLER_MSDK_GET_JOYSTICK_CTRL_AUTH_EVENT: {
             if (eventData.curJoystickCtrlAuthority == DJI_FLIGHT_CONTROLLER_JOYSTICK_CTRL_AUTHORITY_MSDK) {
+                DjiTest_WidgetLogAppend("Msdk request ctrl authority!");
                 USER_LOG_INFO("[Event]Msdk request to obtain joystick ctrl authority\r\n");
             } else {
+                DjiTest_WidgetLogAppend("Msdk release ctrl authority!");
                 USER_LOG_INFO("[Event]Msdk request to release joystick ctrl authority\r\n");
             }
             break;
         }
         case DJI_FLIGHT_CONTROLLER_INTERNAL_GET_JOYSTICK_CTRL_AUTH_EVENT: {
             if (eventData.curJoystickCtrlAuthority == DJI_FLIGHT_CONTROLLER_JOYSTICK_CTRL_AUTHORITY_INTERNAL) {
+                DjiTest_WidgetLogAppend("Internal request ctrl authority!");
                 USER_LOG_INFO("[Event]Internal request to obtain joystick ctrl authority\r\n");
             } else {
+                DjiTest_WidgetLogAppend("Internal release ctrl authority!");
                 USER_LOG_INFO("[Event]Internal request to release joystick ctrl authority\r\n");
             }
             break;
         }
         case DJI_FLIGHT_CONTROLLER_OSDK_GET_JOYSTICK_CTRL_AUTH_EVENT: {
             if (eventData.curJoystickCtrlAuthority == DJI_FLIGHT_CONTROLLER_JOYSTICK_CTRL_AUTHORITY_OSDK) {
+                DjiTest_WidgetLogAppend("request ctrl authority!");
                 USER_LOG_INFO("[Event] Request to obtain joystick ctrl authority\r\n");
             } else {
+                DjiTest_WidgetLogAppend("release ctrl authority!");
                 USER_LOG_INFO("[Event] Request to release joystick ctrl authority\r\n");
             }
             break;
         }
         case DJI_FLIGHT_CONTROLLER_RC_LOST_GET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("rc lost! reset ctrl authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc due to rc lost\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_RC_NOT_P_MODE_RESET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("rc P mode! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc for rc is not in P mode\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_RC_SWITCH_MODE_GET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("rc switching mode! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc due to rc switching mode\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_RC_PAUSE_GET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("rc pausing! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc due to rc pausing\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_RC_REQUEST_GO_HOME_GET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("rc request return! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc due to rc request for return\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_LOW_BATTERY_GO_HOME_RESET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("low battery return! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc for low battery return\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_LOW_BATTERY_LANDING_RESET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("low battery land! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc for low battery land\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_OSDK_LOST_GET_JOYSTICK_CTRL_AUTH_EVENT:
+            DjiTest_WidgetLogAppend("sdk lost! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc due to sdk lost\r\n");
             break;
         case DJI_FLIGHT_CONTROLLER_NERA_FLIGHT_BOUNDARY_RESET_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("near boundary! rc get authority");
             USER_LOG_INFO("[Event]Current joystick ctrl authority is reset to rc due to near boundary\r\n");
             break;
+        case DJI_FLIGHT_CONTROLLER_DOCK_REQUEST_CHANGE_JOYSTICK_CTRL_AUTH_EVENT :
+            DjiTest_WidgetLogAppend("dock request! dock get authority");
+            USER_LOG_INFO("[Event]Current joystick ctrl authority is change due to the dock request\r\n");
+            break;
         default:
+            DjiTest_WidgetLogAppend("Unknown ctrl authority event");
             USER_LOG_INFO("[Event]Unknown joystick ctrl authority event\r\n");
     }
 
     return DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS;
 }
 
-static T_DjiReturnCode DjiTest_FlightControlSetFtsTrigger(E_DjiMountPosition position, const char* desc)
+static T_DjiReturnCode DjiTest_SetFtsTrigger(E_DjiMountPosition position, const char* desc)
 {
     T_DjiReturnCode djiStat;
     T_DjiFtsPwmEscTriggerStatus esc_status;
 
-    djiStat = DjiFlightController_SelectFtsPwmTrigger(position);
+    djiStat = DjiFts_SelectFtsPwmTrigger(position);
     if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("select fts pwm trigger E-PORT error, error code: 0x%08X", djiStat);
         return djiStat;
     }
 
-    djiStat = DjiFlightController_GetFtsPwmTriggerStatus(&esc_status);
+    djiStat = DjiFts_GetFtsPwmTriggerStatus(&esc_status);
     if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("get pwm trigger status error, error code: 0x%08X", djiStat);
         return djiStat;
@@ -1778,26 +1906,16 @@ static T_DjiReturnCode DjiTest_FlightControlSetFtsTrigger(E_DjiMountPosition pos
     return djiStat;
 }
 
-T_DjiReturnCode DjiTest_FlightControlFtsPwmTriggerSample(E_DjiMountPosition position, const char* port_name)
+T_DjiReturnCode DjiTest_FtsPwmTriggerSample(E_DjiMountPosition position, const char* port_name)
 {
     T_DjiReturnCode returnCode;
 
-    returnCode = DjiTest_FlightControlInit();
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Init flight Control sample failed,error code:0x%08llX", returnCode);
-        return returnCode;
-    }
-    returnCode = DjiTest_FlightControlSetFtsTrigger(position, port_name);
+    returnCode = DjiTest_SetFtsTrigger(position, port_name);
     if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         USER_LOG_ERROR("Test select %s fts pwm trigger failed", port_name);
         return returnCode;
     }
 
-    returnCode = DjiTest_FlightControlDeInit();
-    if (returnCode != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-        USER_LOG_ERROR("Deinit Flight Control sample failed,error code:0x%08llX", returnCode);
-        return returnCode;
-    }
     return returnCode;
 }
 

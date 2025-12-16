@@ -1,10 +1,10 @@
 /**
  ********************************************************************
- * @file    dji_version.h
- * @brief   This is the header file for "dji_version.c", defining the structure and
+ * @file    test_positioning_entry.h
+ * @brief   This is the header file for "test_flight_controller_entry.c", defining the structure and
  * (exported) function prototypes.
  *
- * @copyright (c) 2021 DJI. All rights reserved.
+ * @copyright (c) 2018 DJI. All rights reserved.
  *
  * All information contained herein is, and remains, the property of DJI.
  * The intellectual and technical concepts contained herein are proprietary
@@ -24,28 +24,17 @@
  */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef DJI_VERSION_H
-#define DJI_VERSION_H
+#ifndef TEST_POSITIOING_ENTRY_H
+#define TEST_POSITIOING_ENTRY_H
 
 /* Includes ------------------------------------------------------------------*/
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Exported constants --------------------------------------------------------*/
-#define DJI_VERSION_MAJOR   3   /*!< DJI SDK major version num, when have incompatible API changes. Range from 0 to 99. */
-#define DJI_VERSION_MINOR   15  /*!< DJI SDK minor version num, when add functionality in a backwards compatible manner changes. Range from 0 to 99. */
-#define DJI_VERSION_MODIFY  0   /*!< DJI SDK modify version num, when have backwards compatible bug fixes changes. Range from 0 to 99. */
-#define DJI_VERSION_BETA    0   /*!< DJI SDK version beta info, release version will be 0, when beta version release changes. Range from 0 to 255. */
-#define DJI_VERSION_BUILD   2318 /*!< DJI SDK version build info, when jenkins trigger build changes. Range from 0 to 65535. */
 
 /* Exported types ------------------------------------------------------------*/
 
 /* Exported functions --------------------------------------------------------*/
+T_DjiReturnCode DjiTest_RunOnboardRTKSample(void);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif // DJI_VERSION_H
+#endif // TEST_FLIGHT_CONTROLLER_ENTRY_H
 /************************ (C) COPYRIGHT DJI Innovations *******END OF FILE******/

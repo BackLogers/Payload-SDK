@@ -29,7 +29,6 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "dji_typedef.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -114,6 +113,7 @@ typedef enum {
     DJI_FLIGHT_CONTROLLER_LOW_BATTERY_LANDING_RESET_JOYSTICK_CTRL_AUTH_EVENT = 10, /*!< Reset the joystick control permission to RC when aircraft is executing low-battery-landing*/
     DJI_FLIGHT_CONTROLLER_OSDK_LOST_GET_JOYSTICK_CTRL_AUTH_EVENT = 11, /*!< Reset the joystick control permission to RC when PSDK is lost*/
     DJI_FLIGHT_CONTROLLER_NERA_FLIGHT_BOUNDARY_RESET_JOYSTICK_CTRL_AUTH_EVENT = 12, /*!< Reset the joystick control permission to RC when aircraft is near boundary.*/
+    DJI_FLIGHT_CONTROLLER_DOCK_REQUEST_CHANGE_JOYSTICK_CTRL_AUTH_EVENT = 13, /*!< Dock request change the joystick control permission.*/
 } E_DjiFlightControllerJoystickCtrlAuthoritySwitchEvent;
 
 /**
@@ -283,24 +283,67 @@ typedef struct {
     uint16_t altitude;
 } T_DjiFlightControllerRidInfo;
 
+typedef struct
+{
+    double lat; /*!< Target point latitude, unit: rad */
+    double lon; /*!< Target point longitude, unit: rad */
+    float alt;  /*!< Target point altitude, ellipsoidal height unit: meters */
+} T_DjiFlightControllerPointInfo;
+
+typedef struct
+{
+    uint8_t version; /*!< Function version */
+    int8_t operation; /*!< New upload of a target point or update of the current task's target point; 0: new order,  1: update goal */
+    float mea; /*!< Minimum enroute height, in meters, relative to the takeoff point.
+                If the aircraft has not started or is on the ground, it will first climb to this height before executing the task. This height is ignored if the aircraft is in the air. */
+    uint8_t fly_vel; /*!< Maximum horizontal flight speed to the target point, in meters per second */
+    uint8_t goal_num; /*!< Number of target points, currently only supports one point */
+    T_DjiFlightControllerPointInfo cmd_mode_point_info[1]; /*!< Information of the target point */
+} T_DjiFlightControllerStartMissionReq;
+
+typedef struct
+{
+    uint8_t ret_code; /*!< 0: Start task successfully, 1: Start task failed */
+    uint16_t error_code; /*!< Instruction flight route version reused route error code */
+    uint8_t code_name; /*!< Task code, unique, will be included in the trajectory push to ensure that external modules can correlate the task with its trajectory */
+} T_DjiFlightControllerStartMissionRsp;
+
+typedef struct
+{
+    uint8_t mission_state_machine; /*!< Task state machine, 0 is idle, others are in progress.*/
+    uint8_t mission_planning_algo; /*!< Task planning algorithm mode */
+    uint8_t goal_index; /*!< Current target point index */
+    float distance_remaining; /*!< Remaining task distance */
+    float time_remaining; /*!< Remaining task time */
+    uint8_t soe_remaining; /*!< Required SOE (State of Energy) */
+    uint8_t progress; /*!< Progress, reserved unused */
+    uint8_t success_rate; /*!< Task success rate, reserved unused */
+} T_DjiFlightControllerOpenMis;
+
+typedef struct
+{
+    int32_t latitude; /*!< GPS latitude, unit: 1/2^32 * 180°, range: [-90°, 90°) */
+    int32_t longitude; /*!< GPS longitude, unit: 1/2^32 * 360°, range: [-180°, 180°) */
+    int32_t altitude; /*!< Altitude, unit: mm; Note: The type of altitude depends on the function definition.
+                       It could be: relative to the takeoff point, WGS84 absolute ellipsoidal height, EGM96 absolute altitude, barometric height, etc. */
+} T_DjiFlightControllerSpotlightZoomGps;
+
+typedef struct
+{
+    uint8_t code_name; /*!< Unique task code for this trajectory push */
+    uint8_t point_num; /*!< Number of key points in the trajectory */
+    uint8_t byte_per_point; /*!< Number of bytes per point */
+    T_DjiFlightControllerSpotlightZoomGps points[1]; /*!< Array of key points in the trajectory */
+    uint8_t last_point_type; /*!< Whether the target point can be reached
+                              0: Yes, the last point in the trajectory is the user's target point
+                              1: No, the user's target point is in an invalid area (e.g., within an NFZ or building), the last point is the closest point to the target */
+} T_DjiFlightControllerCoreTraj;
+
 #pragma pack()
-
-typedef struct {
-    E_DjiMountPosition fts_select;
-    E_DjiFlightControllerFtsStatus fts_status;
-    uint8_t fts_pwm_cnt; /* correct number of PWM signals received */
-} T_DjiFtsPwmTriggerStatus;
-
-typedef struct {
-    T_DjiFtsPwmTriggerStatus ESC[4]; /* trigger status of the two ESCs */
-} T_DjiFtsPwmEscTriggerStatus;
 
 /* Exported functions --------------------------------------------------------*/
 /**
  * @brief Initialise flight controller module
- * @note  If flight without RC is required, call DjiFlightController_SetRCLostActionEnableStatus(DJI_FLIGHT_CONTROLLER_DISABLE_RC_LOST_ACTION) after initialization.
- *        Otherwise, when the remote controller goes offline, the configured RC-lost action
- *        (e.g., return-to-home, auto-landing, hover, etc.) will be executed.
  * @param ridInfo: Must report the correct RID information before using PSDK to control the aircraft.
  * @return Execution result.
  */
@@ -311,6 +354,81 @@ T_DjiReturnCode DjiFlightController_Init(T_DjiFlightControllerRidInfo ridInfo);
  * @return Execution result.
  */
 T_DjiReturnCode DjiFlightController_DeInit(void);
+
+/**
+ * @brief Set planning algorithm.
+ * @param algo: 0:smart height, 1:Manual height.
+ * @return Execution result.
+ */
+T_DjiReturnCode DjiFlightController_SetPlanningAlgo(uint8_t algo);
+
+/**
+ * @brief Set max velocity.
+ * @param value: max velocity value, min:1, max:15.
+ * @return Execution result.
+*/
+T_DjiReturnCode DjiFlightController_SetMaxVelocity(uint8_t value);
+
+/**
+ * @brief Set min flight height.
+ * @param value: min flight height value, min:1.0, max:3000.0, only SetPlanningAlgo 1 effective.
+ * @return Execution result.
+*/
+T_DjiReturnCode DjiFlightController_SetMinFlightHeight(float value);
+
+/**
+ * @brief Get exit reason.
+ * @param reason: exit reason".
+ * @return Execution result.
+*/
+T_DjiReturnCode DjiFlightController_GetExitReason(uint16_t *reason);
+
+/**
+ * @brief Prototype of callback function used to get open mis info.
+ * @return Execution result.
+ */
+typedef T_DjiReturnCode (*FcCmderModeOpenMisEventCbFunc)(T_DjiFlightControllerOpenMis eventData);
+
+/**
+ * @brief Prototype of callback function used to get core traj info.
+ * @return Execution result.
+ */
+typedef T_DjiReturnCode (*FcCmderModeCoreTrajEventCbFunc)(T_DjiFlightControllerCoreTraj eventData);
+
+/**
+ * @brief Register callback function for the open mis event.
+ * @param callback: the callback for the open mis  event.
+ * @return Execution result.
+ */
+T_DjiReturnCode DjiFlightController_RegisterOpenMisInfoCallBack(FcCmderModeOpenMisEventCbFunc callback);
+
+/**
+ * @brief Register callback function for the core traj event.
+ * @param callback: the callback for the core traj event.
+ * @return Execution result.
+ */
+T_DjiReturnCode DjiFlightController_RegisterCoreTrajCallBack(FcCmderModeCoreTrajEventCbFunc callback);
+
+/**
+ * @brief antiregister callback function for the open mis event.
+ * @return Execution result.
+ */
+T_DjiReturnCode DjiFlightController_AntiRegisterOpenMisInfoCallBack(void);
+
+/**
+ * @brief antiregister callback function for the core traj event.
+ * @return Execution result.
+ */
+T_DjiReturnCode DjiFlightController_AntiRegisterCoreTrajCallBack(void);
+
+/**
+ * @brief set mode start mission.
+ * @param command: cmd for start mission.
+ * @param rsp: response data for set start mission.
+ * @return Execution result.
+ */
+T_DjiReturnCode DjiFlightController_SetModeStartMission(T_DjiFlightControllerStartMissionReq command,
+                                                       T_DjiFlightControllerStartMissionRsp *rsp);
 
 /**
  * @brief Enable/Disable RTK position function.
@@ -650,10 +768,6 @@ T_DjiReturnCode DjiFlightController_GetGeneralInfo(T_DjiFlightControllerGeneralI
   *         if the command is disable, the aircraft will execute RC lost action when RC is lost but PSDK is running
   *         the aircraft will execute RC lost action when RC is lost and PSDK is lost whatever the command is.
   *         default command is disable.
-  *          If flight without RC is required, set DJI_FLIGHT_CONTROLLER_DISABLE_RC_LOST_ACTION.
-  *          Otherwise, when the remote controller goes offline, the configured RC-lost action
-  *          (e.g., return-to-home, auto-landing, hover, etc.) will be executed.
-  *
   * @param executeRCLostActionOrNotWhenOnboardOn  enable:1;disable:0
   * @return T_DjiReturnCode error code
    */
@@ -695,30 +809,6 @@ T_DjiReturnCode DjiFlightController_StopSlowRotateMotor(void);
  * @return Execution result.
  */
 T_DjiReturnCode DjiFlightController_GetElectronicSpeedControllerStatus(E_DjiFlightControllerElectronicSpeedControllerStatus *status);
-
-/**
- * @brief Select Fts pwm trigger.
- * - Notes:Timing requirement: This API must be called while the aircraft is on the ground (not airborne). Calls made during flight will fail or be rejected.
- * - Function: This call only selects/enables the PWM trigger port on the flight controller side.
- *   It does NOT emit PWM signals nor perform the motor-stop action itself. The actual motor-stop must be triggered by sending PWM signals via external PWM hardware pins.
- * - Recommended flow:
- *   1) Call DjiFlightController_SelectFtsPwmTrigger(position) on ground to enable the port;
- *   2) Send the motor-stop PWM from an external PWM controller to that port;
- * @param position
- * - Supported models/ports:
- *   - M400: only support DJI_MOUNT_POSITION_EXTENSION_PORT_V2_NO4.
- * @return Possible failure reasons include invalid param, aircraft not on ground, hardware unsupported, or module not initialized.
- */
-T_DjiReturnCode DjiFlightController_SelectFtsPwmTrigger(E_DjiMountPosition position);
-
-/**
- * @brief Get Fts pwm trigger status.
- * Notes:This API is deprecated and will be removed in a future release. It is NOT recommended for use. Supported models only: M4 serials.
- * Recommended alternative: To confirm motor-stop (FTS) effects, use DJI_FC_SUBSCRIPTION_TOPIC_ESC_DATA fc subscription
- * @param trigger_status
- * @return Execution result.
- */
-T_DjiReturnCode DjiFlightController_GetFtsPwmTriggerStatus(T_DjiFtsPwmEscTriggerStatus* trigger_status);
 
 #ifdef __cplusplus
 }
