@@ -43,7 +43,7 @@
 #define DJI_CONSOLE_UART_BAUD            921600
 
 #define EXTERNAL_UART_NUM  							 UART_NUM_1
-#define EXTERNAL_UART_BAUD               921600
+#define EXTERNAL_UART_BAUD               2400
 #define EXTERNAL_UART_MAX_LENGTH 		     64
 
 /* Exported types ------------------------------------------------------------*/

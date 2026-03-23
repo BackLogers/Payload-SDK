@@ -8,10 +8,15 @@
 #include "dji_sdk_config.h"
 #include "file_binary_array_list.h"
 #include "uart.h"
+#include "detector_functions.h"
 
 /* Private constants ---------------------------------------------------------*/
 #define WIDGET_DIR_PATH_LEN_MAX         (256)
 #define WIDGET_TASK_STACK_SIZE          (2048)
+
+#define CLEAR_DATA_TIMEOUT_MS 					10000 //After this time reset receved detection data
+#define DEVICE_STATUS_CHECK_TIMEOUT_MS 	3000  //After this time check if detector still working (send some command - should respond)
+#define DEVICE_STATUS_TIMEOUT_MS 				DEVICE_STATUS_CHECK_TIMEOUT_MS + 1000 // After this time change detector status to disable
 
 /* Private types -------------------------------------------------------------*/
 typedef enum int8_t{
@@ -204,43 +209,57 @@ static void *DjiTest_WidgetTask(void *arg)
     }
 
     USER_UTIL_UNUSED(arg);
+		
+		Searcher_Information detectionData;
+		uint32_t currentTime = 0;
+		uint32_t timeDiffrence = 0;
+		uint32_t lastTransmisionTimeMs = 0;
+		uint32_t lastDetectionDataTimeMs = 0;
+		uint8_t detectorStatus = 0;
 
-    while (1) {
-        int uartReadLength = UART_Read(EXTERNAL_UART_NUM, uartDataBuffer, EXTERNAL_UART_MAX_LENGTH);
+    while (1) {							
+			
+			djiStat = osalHandler->GetTimeMs(&currentTime); //Get current time
+			if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+				USER_LOG_ERROR("get current time error: 0x%08llX.", djiStat);
+      }
+					 
+			uint8_t messageStatus = getDetectorData(&detectionData);
+			
+			if (messageStatus) { //some message receved
+				lastTransmisionTimeMs = currentTime;
+				if (messageStatus == 1) lastDetectionDataTimeMs = currentTime; // detection data
+			}
 
-        if (uartReadLength == sizeof(DetectionData_t)) {
-            DetectionData_t data;
-            memcpy(&data, uartDataBuffer, sizeof(DetectionData_t));
+			
+			timeDiffrence = currentTime - lastTransmisionTimeMs;
+			if (timeDiffrence < DEVICE_STATUS_CHECK_TIMEOUT_MS){ //detector working
+				detectorStatus = 1;
+			} else if (timeDiffrence < DEVICE_STATUS_TIMEOUT_MS){ //check detector is still working
+				enableSearcherInformation(); //send some data and wait for response
+			} else { //detector not working
+				detectorStatus = 0;
+			}
 
-            const char* arrow;
-            if (data.direction < 0 || data.direction > 8) {
-                arrow = "?";
-            } else {
-                arrow = directionArrows[data.direction];
-            }
-
-            snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN,
-                     "Detected: %s\nDirection: %s\nDistance: %d m",
-                     data.detected ? "True" : "False",
-                     arrow,
-                     data.distance);
-
-            djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
-            if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
-                USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
-            }
-
-            DjiTestWidget_SetWidgetValue(DJI_WIDGET_TYPE_SCALE, 2, data.distance, NULL);
-
-            UART_Write(EXTERNAL_UART_NUM, uartDataBuffer, sizeof(DetectionData_t)); // echo
-
-        } else if (uartReadLength > 0) {
-            snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN,
-                     "Invalid data len: %d (expect %d)", uartReadLength, (int)sizeof(DetectionData_t));
-            djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
-        }
-
-        osalHandler->TaskSleepMs(200);
+			timeDiffrence = currentTime - lastDetectionDataTimeMs;
+			if (timeDiffrence > CLEAR_DATA_TIMEOUT_MS || !detectorStatus){ //clear data
+				memset(&detectionData, 0, sizeof(detectionData));
+			}
+			
+			//MAX 256 characters and 5 lines of text!
+			snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN,
+			"Detector enable: %s\nSignal detected: %s\nDirection: %d\xC2\xB0\nDistance: %dm\nLast message time: %ds",
+													detectorStatus ? "True" : "False",
+													detectionData.nb_of_beacons ? "True" : "False",
+													detectionData.direction,
+													detectionData.distance/10, timeDiffrence/1000);
+			
+			djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
+			if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+				USER_LOG_ERROR("Floating window show message error, stat = 0x%08llX", djiStat);
+      }
+			
+			osalHandler->TaskSleepMs(200);
     }
 }
 

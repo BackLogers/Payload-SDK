@@ -1,3 +1,5 @@
 /samples/sample_c/platform/rtos_freertos/stm32f4_discovery/project/mdk_bootloader
 /samples/sample_c/platform/rtos_freertos/stm32f4_discovery/project/mdk
 samples/sample_c/platform/rtos_freertos/stm32f4_discovery/application/dji_sdk_app_info.h
+samples/sample_c/module_sample/widget_detector/detector_functions.c
+samples/sample_c/module_sample/widget_detector/detector_functions.h
