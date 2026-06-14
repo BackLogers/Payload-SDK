@@ -248,11 +248,12 @@ static void *DjiTest_WidgetTask(void *arg)
 			
 			//MAX 256 characters and 5 lines of text!
 			snprintf(message, DJI_WIDGET_FLOATING_WINDOW_MSG_MAX_LEN,
-			"Detector enable: %s\nSignal detected: %s\nDirection: %d\xC2\xB0\nDistance: %dm\nLast message time: %ds",
-													detectorStatus ? "True" : "False",
-													detectionData.nb_of_beacons ? "True" : "False",
+													"Connected: %s,   Last msg: %ds\nDetected: %s,   Count: %d\nDirection: %d\xC2\xB0\nDistance: %dm\nVital status: %s",
+													detectorStatus ? "True" : "False", timeDiffrence/1000,
+													detectionData.nb_of_beacons ? "True" : "False", detectionData.nb_of_beacons,
 													detectionData.direction,
-													detectionData.distance/10, timeDiffrence/1000);
+													detectionData.distance/10, 
+													detectionData.nb_of_beacons ? "Positive" : "Unknown");
 			
 			djiStat = DjiWidgetFloatingWindow_ShowMessage(message);
 			if (djiStat != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
